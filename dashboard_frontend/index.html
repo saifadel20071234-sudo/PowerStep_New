@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>PowerStep Grid — لوحة التحكم الحية</title>
+  <script src="vendor/chart.umd.js"></script>
+  <script>
+    // إزالة الـ Service Worker نهائياً (بيخزن نسخ قديمة) — الداش بورد يحتاج دائماً أحدث نسخة من السيرفر
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    }
+  </script>
+  <style>
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="loadingScreen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center; transition: opacity 0.5s ease-out;">
+  <div style="width:100px; height:100px; border: 4px solid #00ffcc; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; box-shadow: 0 0 20px rgba(0,255,204,0.5), inset 0 0 20px rgba(0,255,204,0.5);"></div>
+  <h1 style="color:#00ffcc; text-shadow:0 0 10px #00ffcc; margin-top:20px; font-family:'Consolas', monospace; letter-spacing:3px;">POWERSTEP GRID</h1>
+  <p style="color:var(--muted); font-family:'Consolas', monospace; margin-top:5px;">INITIALIZING SYSTEM...</p>
+</div>
+<script>
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      const loader = document.getElementById('loadingScreen');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.style.display = 'none', 500);
+      }
+    }, 2500);
+  });
+</script>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal-overlay hidden">
+  <div class="modal-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+      <h3 style="margin:0; color:var(--green);">⚙️ إعدادات النظام</h3>
+      <button onclick="hideSettingsModal()" style="background:transparent; border:none; color:var(--red); font-size:1.2rem; cursor:pointer;">✖</button>
+    </div>
+    
+    <div class="setting-group">
+      <label>حد تحذير كفاءة البلاطة (<span id="effValDisp" style="color:var(--green);">80</span>%)</label>
+      <input type="range" id="effThreshold" min="50" max="95" value="80" oninput="document.getElementById('effValDisp').textContent=this.value">
+      <small style="color:var(--muted); font-size:0.75rem;">تتحول البلاطة للأحمر إذا انخفضت الكفاءة عن هذا الحد.</small>
+    </div>
+    
+    <div class="setting-group">
+      <label>حد تحذير البطارية (<span id="battValDisp" style="color:var(--red);">20</span>%)</label>
+      <input type="range" id="battThreshold" min="10" max="40" value="20" oninput="document.getElementById('battValDisp').textContent=this.value">
+    </div>
+
+    <div class="setting-group" style="display:flex; flex-direction:row; align-items:center; justify-content:space-between;">
+      <label style="margin:0;">تفعيل التنبيهات الصوتية</label>
+      <input type="checkbox" id="soundToggle" checked style="width:20px; height:20px;">
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:25px;">
+      <button class="btn-export" style="flex:1; justify-content:center;" onclick="saveSettings()">💾 حفظ</button>
+      <button class="btn-export" style="flex:1; justify-content:center; background:transparent; border-color:var(--muted); color:var(--ink);" onclick="resetSettings()">↺ افتراضي</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div>
+    <div class="title">⚡ PowerStep Grid Control</div>
+    <div class="subtitle">Sci-Fi AI Dashboard — محاكاة أرضية المستقبل المتكاملة</div>
+  </div>
+  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+    <div style="display:flex; gap: 8px;">
+      <button id="themeToggleBtn" class="theme-toggle-btn" title="تغيير المظهر (Dark/Light)">🌙</button>
+      <button class="theme-toggle-btn" title="إعدادات النظام" onclick="showSettingsModal()">⚙️</button>
+      <div id="connectionBadge" class="conn-badge online">
+        <span class="conn-dot"></span> <span id="connText">SYSTEM ONLINE</span>
+      </div>
+    </div>
+    <div class="status" style="margin-bottom:0; background:rgba(0,0,0,0.5);">
+      <span class="dot"></span>
+      <span>المحاكاة: يوم <span id="dayNum" class="mono">1</span> — الساعة <span id="simTime" class="sim-time mono">--:--</span></span>
+    </div>
+    <div id="realClock" style="font-family:'Consolas', monospace; font-size:1.4rem; color:#00ffcc; text-shadow:0 0 10px rgba(0,255,204,0.5); font-weight:bold; letter-spacing:2px; margin-top:5px;">
+      --:--:--
+    </div>
+  </div>
+</header>
+
+<div style="max-width:1300px; margin:10px auto; padding:0 26px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+  <div class="nav-links">
+    <a href="/" class="active">🏠 لوحة التحكم</a>
+    <a href="/analytics.html">📊 التحليلات</a>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <a class="btn-export" id="csvLink" target="_blank">📥 CSV</a>
+    <button class="btn-export" onclick="window.print()" style="background:linear-gradient(135deg,#6b21a8,#9333ea); border-color:#b026ff; box-shadow:0 0 12px rgba(176,38,255,0.3);">📄 PDF</button>
+  </div>
+</div>
+
+<main>
+
+
+  <!-- عداد الطاقة الإجمالية المُولَّدة -->
+  <div class="energy-counter-banner">
+    <div style="z-index:1;">
+      <div style="font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">⚡ إجمالي ما ولّده النظام منذ بدء التشغيل</div>
+      <div style="font-size:.72rem; color:var(--muted); opacity:.7;">يتحدث كل ثانية — مباشر من نواة المحاكي</div>
+    </div>
+    <div class="counter-group" style="z-index:1;">
+      <div class="counter-item">
+        <div class="counter-val green" id="totalGenWh">0.0000</div>
+        <div class="counter-label">واط·ساعة مُولَّدة (Wh)</div>
+      </div>
+      <div class="counter-divider"></div>
+      <div class="counter-item">
+        <div class="counter-val blue" id="totalConWh">0.0000</div>
+        <div class="counter-label">واط·ساعة مُستهلَكة (Wh)</div>
+      </div>
+      <div class="counter-divider"></div>
+      <div class="counter-item">
+        <div class="counter-val orange" id="totalSavedCO2">0.00</div>
+        <div class="counter-label">جرام CO₂ تم توفيره 🌱</div>
+      </div>
+      <div class="counter-divider"></div>
+      <div class="counter-item">
+        <div class="counter-val green" id="costSavedVal">0.00</div>
+        <div class="counter-label">التكلفة الموفرة ($)</div>
+      </div>
+      <div class="counter-divider"></div>
+      <div class="counter-item">
+        <div class="counter-val blue" id="exportedWhVal">0.0000</div>
+        <div class="counter-label">الطاقة المصدرة (Wh)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid4" style="margin-bottom: 20px;">
+    <div class="card" style="display:flex; align-items:center; gap:10px;">
+      <div style="font-size:2rem;">⚡</div>
+      <div>
+        <div style="font-size:0.8rem; color:var(--muted);">الجهد (Voltage)</div>
+        <div style="font-size:1.5rem; font-weight:bold; color:var(--green);"><span id="voltageVal">0.0</span> V</div>
+      </div>
+    </div>
+    <div class="card" style="display:flex; align-items:center; gap:10px;">
+      <div style="font-size:2rem;">🔌</div>
+      <div>
+        <div style="font-size:0.8rem; color:var(--muted);">التيار (Current)</div>
+        <div style="font-size:1.5rem; font-weight:bold; color:var(--blue);"><span id="currentVal">0.0</span> A</div>
+      </div>
+    </div>
+    <div class="card" style="display:flex; align-items:center; gap:10px;">
+      <div style="font-size:2rem;">⏱️</div>
+      <div>
+        <div style="font-size:0.8rem; color:var(--muted);">مدة التشغيل (Uptime)</div>
+        <div style="font-size:1.2rem; font-weight:bold; color:var(--purple);"><span id="uptimeVal">00:00:00</span></div>
+      </div>
+    </div>
+    <div class="card" style="display:flex; align-items:center; gap:10px;">
+      <div style="font-size:2rem;">🤖</div>
+      <div>
+        <div style="font-size:0.8rem; color:var(--muted);">حالة الـ AI</div>
+        <div style="font-size:0.85rem; font-weight:bold; margin-bottom: 3px;">التوقع: <span id="aiStatusForecast" style="color:var(--green);">OK</span></div>
+        <div style="font-size:0.85rem; font-weight:bold;">الشذوذ: <span id="aiStatusAnomaly" style="color:var(--green);">OK</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid4">
+    <div class="card gauge-wrap">
+      <h3>التوليد اللحظي</h3>
+      <div class="gauge" id="gaugeGen" style="--ring-color:var(--green); --pct:0;">
+        <div class="val"><span id="genVal">0.0</span><small>واط</small></div>
+      </div>
+      <div style="margin-top: 15px; text-align: center; font-size: 0.85rem; color: var(--green); text-shadow: 0 0 5px rgba(0,255,204,0.4);">
+        🔮 الـ AI يتوقع: <b id="forecastVal">0.0</b> واط
+        <div style="margin-top:5px; font-size:0.75rem; color:#00ccff; text-shadow:none; padding:4px; background:rgba(0,204,255,0.1); border-radius:4px; border:1px solid rgba(0,204,255,0.3);">
+          🌍 منعنا انبعاث <b id="co2SavedVal">0.0</b> جم CO₂
+        </div>
+      </div>
+    </div>
+    <div class="card gauge-wrap">
+      <h3>الاستهلاك اللحظي</h3>
+      <div class="gauge" id="gaugeCon" style="--ring-color:var(--orange); --pct:0;">
+        <div class="val"><span id="conVal">0.0</span><small>واط</small></div>
+      </div>
+    </div>
+    <div class="card gauge-wrap">
+      <h3>الاكتفاء الذاتي</h3>
+      <div class="gauge" id="gaugeSelf" style="--ring-color:var(--purple); --pct:0;">
+        <div class="val"><span id="selfVal">0</span><small>%</small></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>طاقة التخزين (Battery SOC)</h3>
+      <div class="battery">
+        <div class="fill" id="battFill" style="width:0%"></div>
+        <div class="label"><span id="battVal">0</span>%</div>
+      </div>
+      <div class="source-tag" id="sourceTag">مصدر التغذية: <b id="sourceLabel">—</b></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>تحليل الطاقة (توليد / استهلاك) Wh</h3>
+      <canvas id="energyChart" height="110"></canvas>
+    </div>
+    <div class="card">
+      <h3>معدل الحركة (خطوة/دقيقة)</h3>
+      <div class="footfall-strip" id="footfallStrip"></div>
+      <div style="margin-top:15px; text-align:center;">
+        <span class="mono" style="font-size:1.8rem; font-weight:800; color:var(--green); text-shadow: 0 0 10px rgba(0,255,204,0.5);" id="footfallNow">0</span>
+        <div style="font-size:.75rem; color:var(--muted); text-transform: uppercase;">Live Footfall</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2b">
+    <div class="card">
+      <h3>توزيع الأحمال الذكي (Smart Relays)</h3>
+      <div class="loads-list" id="loadsList"></div>
+    </div>
+    <div class="card">
+      <h3>نظام رصد الأعطال (AI Alerts)</h3>
+      <div class="alerts-list" id="alertsList"><div class="alerts-empty">النظام مستقر — لا توجد شذوذ (Anomalies)</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="display:flex; justify-content:space-between; align-items:center;">
+      <span>خريطة الممر الحية (Live Corridor Map)</span>
+      <span style="font-size: 0.7rem; font-weight: normal; color: var(--green); text-shadow: 0 0 5px var(--green);">تشتعل البلاطة عند الضغط الفعلي</span>
+    </h3>
+    <div class="corridor" id="corridor">
+      <div class="corridor-row" id="corridorRowTop"></div>
+      <div class="corridor-mid">
+        <div class="corridor-wall"></div>
+      </div>
+      <div class="corridor-row" id="corridorRowBottom"></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>POWERSTEP GRID © 2026 · AI-Powered Floor Simulation · SECURE CONNECTION</footer>
+
+<script src="app.js"></script>
+
+</body>
+</html>
