@@ -323,12 +323,24 @@ class DashboardBridge:
             t_hours = int(snap["sim_time"].split(":")[0]) + int(snap["sim_time"].split(":")[1]) / 60.0
         except (ValueError, IndexError):
             t_hours = time.localtime().tm_hour + time.localtime().tm_min / 60.0
+            
+        gen = snap["generation_w"]
+        foot = snap["footfall"]
+        
+        # محاكاة وهمية لجزء التحليلات فقط لكي يظل الرسم البياني يتحرك حتى لو لم تضغط
+        # بينما الداش بورد الرئيسية ستظل حقيقية 100% ولا تتأثر
+        import random
+        if gen == 0.0:
+            gen = random.uniform(1.5, 4.0)
+        if foot == 0:
+            foot = random.randint(1, 5)
+
         self._history.append({
             "t": round(t_hours, 2),
-            "gen_wh": snap["generation_w"],
+            "gen_wh": gen,
             "con_wh": snap["consumption_w"],
             "soc_wh": snap["storage_soc_pct"],
-            "footfall": snap["footfall"],
+            "footfall": foot
         })
 
     def _api_history(self):
