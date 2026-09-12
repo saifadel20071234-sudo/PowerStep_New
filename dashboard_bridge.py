@@ -107,7 +107,7 @@ class DashboardBridge:
         self._uptime_offset_sec = 0.0
 
     # ------------------------------------------------------------------
-    # الاستقبال من main_system بتاع الفريق
+    # استقبال البيانات من main_system لتحديث الداش بورد
     # ------------------------------------------------------------------
     def on_piezo(self, record) -> None:
         with self._lock:
@@ -252,11 +252,13 @@ class DashboardBridge:
             footfall = 0
 
         tiles = []
+        # جعل كل الـ 16 بلاطة تضيء معاً عند الضغط كشكل مبهر
+        is_pressed = len(active_steps) > 0
         for i in range(1, NUM_TILES + 1):
             eff = _pick(p, "tile_efficiency_pct", "efficiency_pct", "efficiency", default=100.0)
             tiles.append({
                 "id": i,
-                "stepped_on": i in active_steps,
+                "stepped_on": is_pressed or (i in active_steps),
                 "efficiency_pct": round(eff, 1),
             })
 
