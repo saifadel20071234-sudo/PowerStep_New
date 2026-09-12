@@ -304,8 +304,8 @@ class DashboardBridge:
             "battery_temperature": round(temperature, 1) if temperature is not None else None,
             "cumulative_gen_wh": round(cumulative_gen, 4),
             "cumulative_con_wh": 0.0,
-            "co2_saved_grams": round(cumulative_gen * 0.4, 4),
-            "cost_saved": round(cumulative_gen * 0.0004, 4),
+            "co2_saved_grams": round(cumulative_gen * 0.4, 2),
+            "cost_saved": round(cumulative_gen * 0.5, 2),  # 0.5 جنيه لكل Wh مولَّد
             "exported_wh": round(exported, 4) if exported is not None else None,
             "ai_status": {
                 "forecast_model": "Online" if has_data else "Offline",
