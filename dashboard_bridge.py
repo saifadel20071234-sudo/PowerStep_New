@@ -22,6 +22,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import random
 import threading
 import time
 from collections import deque
@@ -252,13 +253,19 @@ class DashboardBridge:
             footfall = 0
 
         tiles = []
-        # جعل كل الـ 16 بلاطة تضيء معاً عند الضغط كشكل مبهر
-        is_pressed = len(active_steps) > 0
+        # إضاءة عشوائية للبلاطات — مش كلهم يضيئو في نفس الوقت
+        # لو في ضغط: عدد عشوائي من 2 إلى 6 بلاطات تضيء
+        if is_pressed:
+            num_active = random.randint(2, 6)
+            active_tile_ids = set(random.sample(range(1, NUM_TILES + 1), min(num_active, NUM_TILES)))
+        else:
+            active_tile_ids = set()
+
         for i in range(1, NUM_TILES + 1):
             eff = _pick(p, "tile_efficiency_pct", "efficiency_pct", "efficiency", default=100.0)
             tiles.append({
                 "id": i,
-                "stepped_on": is_pressed or (i in active_steps),
+                "stepped_on": (i in active_tile_ids) or (i in active_steps),
                 "efficiency_pct": round(eff, 1),
             })
 

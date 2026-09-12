@@ -76,31 +76,30 @@ def simulation_engine():
 
             if step_active:
                 state["press_count"] += 1
-                voltage = random.uniform(2.2, 3.3)
-                current = voltage / 950.0
-                gen_w = voltage * current * 4.0   # Boost للعرض
-                state["cumulative_wh"] += gen_w / 36000.0
-                state["soc"] = min(100.0, state["soc"] + 0.003)
+                voltage = random.uniform(8.5, 12.0)       # جهد كبير وواقعي
+                current = random.uniform(1.5, 3.0)        # تيار قوي
+                gen_w = voltage * current                 # واط حقيقي كبير (15-36W)
+                state["cumulative_wh"] += gen_w / 3600.0  # تراكم سريع
+                state["soc"] = min(100.0, state["soc"] + 0.15)
             else:
                 gen_w = 0.0
-                state["soc"] = max(60.0, state["soc"] - 0.001)
+                state["soc"] = max(60.0, state["soc"] - 0.02)
 
             # تحديث عدد الأشخاص كل 5 ثوانٍ
             wifi_update_counter += 1
             if wifi_update_counter >= 25:  # 25 × 0.2s = 5s
                 wifi_update_counter = 0
-                state["wifi_people"] = random.randint(2, 8)
+                state["wifi_people"] = random.randint(5, 20)
 
             # حفظ في الـ History للرسم البياني
-            uptime = int(now - state["start_time"])
             t_hours = time.localtime().tm_hour + time.localtime().tm_min / 60.0
             if len(state["history"]) == 0 or t_hours != state["history"][-1]["t"]:
-                live_gen = gen_w if step_active else random.uniform(1.5, 3.5)
-                live_foot = state["press_count"] % 10 if step_active else random.randint(1, 4)
+                live_gen = gen_w if step_active else random.uniform(8.0, 20.0)
+                live_foot = random.randint(8, 25) if step_active else random.randint(3, 10)
                 state["history"].append({
                     "t": round(t_hours, 2),
-                    "gen_wh": round(live_gen, 4),
-                    "con_wh": round(random.uniform(4.5, 6.0), 2),
+                    "gen_wh": round(live_gen, 2),
+                    "con_wh": round(random.uniform(40.0, 80.0), 2),
                     "soc_wh": round(state["soc"], 1),
                     "footfall": live_foot,
                 })
@@ -120,9 +119,9 @@ def build_snapshot():
         uptime_sec = int(time.time() - state["start_time"])
 
     if pressed:
-        voltage = random.uniform(2.2, 3.3)
-        current = voltage / 950.0
-        gen_w = voltage * current * 4.0
+        voltage = random.uniform(8.5, 12.0)
+        current = random.uniform(1.5, 3.0)
+        gen_w = voltage * current           # 15W → 36W
     else:
         voltage = 0.0
         current = 0.0
@@ -132,16 +131,23 @@ def build_snapshot():
         uptime_sec // 3600, (uptime_sec % 3600) // 60, uptime_sec % 60
     )
 
+    # عشوائية البلاطات — مش كلهم يضيئو في نفس الوقت
     tiles = []
+    if pressed:
+        num_active = random.randint(3, 8)   # من 3 إلى 8 بلاطات فقط تضيء
+        active_ids = set(random.sample(range(1, 17), num_active))
+    else:
+        active_ids = set()
+
     for i in range(1, 17):
         tiles.append({
             "id": i,
-            "stepped_on": pressed,
-            "efficiency_pct": round(random.uniform(95.0, 100.0), 1),
+            "stepped_on": i in active_ids,
+            "efficiency_pct": round(random.uniform(93.0, 100.0), 1),
         })
 
-    footfall = random.randint(3, 9) if pressed else 0
-    con_w = 5.0
+    footfall = random.randint(10, 30) if pressed else 0
+    con_w = random.uniform(50.0, 90.0)
     self_suff = min(100.0, (gen_w / con_w) * 100.0) if gen_w > 0 else 0.0
 
     return {
